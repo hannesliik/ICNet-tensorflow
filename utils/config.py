@@ -36,21 +36,24 @@ class Config(object):
               'trainval': './model/cityscapes/icnet_cityscapes_trainval_90k.npy',
               'train_bn': './model/cityscapes/icnet_cityscapes_train_30k_bnnomerge.npy',
               'trainval_bn': './model/cityscapes/icnet_cityscapes_trainval_90k_bnnomerge.npy',
-              'others': './model/ade20k/model.ckpt-27150'}
+              'others': 'snapshots/model.ckpt-500'}
     
     ## If you want to train on your own dataset, try to set these parameters.
     others_param = {'name': 'YOUR_OWN_DATASET',
-                    'num_classes': 0,
+                    'num_classes': 34,
                     'ignore_label': 0,
-                    'eval_size': [0, 0],
-                    'eval_steps': 0,
-                    'eval_list': '/PATH/TO/YOUR_EVAL_LIST',
-                    'train_list': '/PATH/TO/YOUR_TRAIN_LIST',
-                    'data_dir': '/PATH/TO/YOUR_DATA_DIR'}
+                    'eval_size': [576, 576],
+                    'eval_steps': 50,
+                    #'eval_list': '/media/hannes/data_disk/ubuntu/milrem-sim-3-v2/test_list.txt',
+                    'eval_list': '/media/hannes/data_disk/ubuntu/milrem_cns/val-list.txt',
+                    'train_list': '/media/hannes/data_disk/ubuntu/milrem-sim-3-v2/train_list.txt',
+                    'data_dir': '/media/hannes/data_disk/ubuntu/milrem-sim-3-v2'}
 
     ## You can modify following lines to train different training configurations.
-    INFER_SIZE = [1024, 2048, 3] 
-    TRAINING_SIZE = [720, 720] 
+    #INFER_SIZE = [1024, 2048, 3]
+    INFER_SIZE = [1024, 2048, 3]
+    #TRAINING_SIZE = [720, 720]
+    TRAINING_SIZE = [576, 576]
     TRAINING_STEPS = 60001
     
     N_WORKERS = 8

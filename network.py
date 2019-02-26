@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import os
+import tqdm
 
 DEFAULT_PADDING = 'VALID'
 DEFAULT_DATAFORMAT = 'NHWC'
@@ -74,7 +75,8 @@ class Network(object):
         
     def restore(self, data_path, var_list=None):
         if data_path.endswith('.npy'):
-            self.load_npy(data_path, self.sess)
+            print("endswith")
+            self.load_npy(data_path, self.sess, ignore_missing=True)
         else:
             loader = tf.train.Saver(var_list=tf.global_variables())
             loader.restore(self.sess, data_path)
@@ -99,9 +101,12 @@ class Network(object):
         ignore_missing: If true, serialized weights for missing layers are ignored.
         '''
         data_dict = np.load(data_path, encoding='latin1').item()
-        for op_name in data_dict:
+        print("Loading from", data_path)
+        for op_name in tqdm.tqdm(data_dict):
+            #print(op_name)
             with tf.variable_scope(op_name, reuse=True):
                 for param_name, data in data_dict[op_name].items():
+                    #print(param_name)
                     try:
                         if 'bn' in op_name:
                             param_name = BN_param_map[param_name]
@@ -109,8 +114,12 @@ class Network(object):
                         var = tf.get_variable(param_name)
                         session.run(var.assign(data))
                     except ValueError:
-                        if not ignore_missing:
-                            raise
+                        print(f"Warning: {op_name} {param_name} missing")
+                        #if "conv6_cls" in param_name:
+                        #    continue
+
+                        #if not ignore_missing:
+                        #    raise
 
     def feed(self, *args):
         '''Set the input(s) for the next operation by replacing the terminal nodes.

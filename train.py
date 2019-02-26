@@ -78,8 +78,9 @@ class TrainConfig(Config):
 
     # Set pre-trained weights here (You can download weight using `python script/download_weights.py`) 
     # Note that you need to use "bnnomerge" version.
-    model_weight = './model/cityscapes/icnet_cityscapes_train_30k_bnnomerge.npy'
-    
+    #model_weight = './model/cityscapes/icnet_cityscapes_trainval_90k_bnnomerge.npy'
+    model_weight = './snapshots/model.ckpt-0'
+
     # Set hyperparameters here, you can get much more setting in Config Class, see 'utils/config.py' for details.
     LAMBDA1 = 0.16
     LAMBDA2 = 0.4
@@ -98,25 +99,25 @@ def main():
     Note: we set filter scale to 1 for pruned model, 2 for non-pruned model. The filters numbers of non-pruned
           model is two times larger than prunde model, e.g., [h, w, 64] <-> [h, w, 32].
     """
-    cfg = TrainConfig(dataset=args.dataset, 
-                is_training=True,
-                random_scale=args.random_scale,
-                random_mirror=args.random_mirror,
-                filter_scale=args.filter_scale)
+    cfg = TrainConfig(dataset=args.dataset,
+                      is_training=True,
+                      random_scale=args.random_scale,
+                      random_mirror=args.random_mirror,
+                      filter_scale=args.filter_scale)
     cfg.display()
 
     # Setup training network and training samples
     train_reader = ImageReader(cfg=cfg, mode='train')
-    train_net = ICNet_BN(image_reader=train_reader, 
-                            cfg=cfg, mode='train')
+    train_net = ICNet_BN(image_reader=train_reader,
+                         cfg=cfg, mode='train')
 
     loss_sub4, loss_sub24, loss_sub124, reduced_loss = create_losses(train_net, train_net.labels, cfg)
 
     # Setup validation network and validation samples
     with tf.variable_scope('', reuse=True):
         val_reader = ImageReader(cfg, mode='eval')
-        val_net = ICNet_BN(image_reader=val_reader, 
-                            cfg=cfg, mode='train')
+        val_net = ICNet_BN(image_reader=val_reader,
+                           cfg=cfg, mode='train')
 
         val_loss_sub4, val_loss_sub24, val_loss_sub124, val_reduced_loss = create_losses(val_net, val_net.labels, cfg)
 
@@ -124,9 +125,10 @@ def main():
     base_lr = tf.constant(cfg.LEARNING_RATE)
     step_ph = tf.placeholder(dtype=tf.float32, shape=())
     learning_rate = tf.scalar_mul(base_lr, tf.pow((1 - step_ph / cfg.TRAINING_STEPS), cfg.POWER))
-    
+
     # Set restore variable 
-    restore_var = tf.global_variables()
+    #restore_var = tf.global_variables()
+    restore_var = [v for v in tf.global_variables() ]#if 'conv6_cls' not in v.name]
     all_trainable = [v for v in tf.trainable_variables() if ('beta' not in v.name and 'gamma' not in v.name) or args.train_beta_gamma]
 
     # Gets moving_mean and moving_variance update operations from tf.GraphKeys.UPDATE_OPS
@@ -136,29 +138,37 @@ def main():
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
     with tf.control_dependencies(update_ops):
-        opt_conv = tf.train.MomentumOptimizer(learning_rate, cfg.MOMENTUM)
+        #opt_conv = tf.train.MomentumOptimizer(learning_rate, cfg.MOMENTUM)
+        opt_conv = tf.train.AdamOptimizer(learning_rate=learning_rate)
         grads = tf.gradients(reduced_loss, all_trainable)
         train_op = opt_conv.apply_gradients(zip(grads, all_trainable))
-    
+
     # Create session & restore weights (Here we only need to use train_net to create session since we reuse it)
     train_net.create_session()
-    train_net.restore(cfg.model_weight, restore_var)
-    saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=5)
 
+    saver = tf.train.Saver(var_list=restore_var, max_to_keep=10)
+    if cfg.model_weight is not None:
+        if cfg.model_weight.endswith(".npy"):
+            train_net.restore(cfg.model_weight, restore_var)
+        else:
+            saver.restore(train_net.sess, cfg.model_weight)
+        #train_net.restore(cfg.model_weight, all_trainable)
+    #saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep=5)
+    train_net.save(saver, cfg.SNAPSHOT_DIR, 0)
     # Iterate over training steps.
     for step in range(cfg.TRAINING_STEPS):
         start_time = time.time()
-            
+
         feed_dict = {step_ph: step}
         if step % cfg.SAVE_PRED_EVERY == 0:
             loss_value, loss1, loss2, loss3, val_loss_value, _ = train_net.sess.run([reduced_loss, loss_sub4, loss_sub24, loss_sub124, val_reduced_loss, train_op], feed_dict=feed_dict)
             train_net.save(saver, cfg.SNAPSHOT_DIR, step)
         else:
-            loss_value, loss1, loss2, loss3, val_loss_value, _ = train_net.sess.run([reduced_loss, loss_sub4, loss_sub24, loss_sub124, val_reduced_loss, train_op], feed_dict=feed_dict)            
+            loss_value, loss1, loss2, loss3, val_loss_value, _ = train_net.sess.run([reduced_loss, loss_sub4, loss_sub24, loss_sub124, val_reduced_loss, train_op], feed_dict=feed_dict)
 
         duration = time.time() - start_time
-        print('step {:d} \t total loss = {:.3f}, sub4 = {:.3f}, sub24 = {:.3f}, sub124 = {:.3f}, val_loss: {:.3f} ({:.3f} sec/step)'.\
-                    format(step, loss_value, loss1, loss2, loss3, val_loss_value, duration))
+        print('step {:d} \t total loss = {:.3f}, sub4 = {:.3f}, sub24 = {:.3f}, sub124 = {:.3f}, val_loss: {:.3f} ({:.3f} sec/step)'. \
+              format(step, loss_value, loss1, loss2, loss3, val_loss_value, duration))
     
     
 if __name__ == '__main__':
